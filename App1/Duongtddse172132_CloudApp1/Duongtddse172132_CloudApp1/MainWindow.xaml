@@ -11,15 +11,5 @@
         <RichTextBox x:Name="ChatHistoryRichTextBox" Grid.Row="0" 
                      IsReadOnly="True" VerticalScrollBarVisibility="Auto"
                      Padding="10" />
-
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="10">
-            <TextBox x:Name="MessageTextBox" Width="600" Height="30" 
-                     VerticalAlignment="Center" Margin="0,0,10,0" KeyDown="UserInputTextBox_KeyDown"/>
-            <Button x:Name="SendMessageButton" Content="Send" Width="100" 
-                    Height="30" Click="SendMessage_Click"/>
-            <Button x:Name="UploadButton" Content="Upload" Width="100" 
-                    Height="30" Click="UploadButton_Click"/>
-
-        </StackPanel>
     </Grid>
 </Window>

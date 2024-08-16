@@ -1,4 +1,8 @@
 ﻿using FirebaseAdmin;
+using FirebaseAdmin.Messaging;
+using GenerativeAI.Methods;
+using GenerativeAI.Models;
+using GenerativeAI.Types;
 using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -10,6 +14,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using static Duongtddse172132_CloudApp1.MainWindow;
 
 namespace Duongtddse172132_CloudApp1
 {
@@ -17,13 +22,26 @@ namespace Duongtddse172132_CloudApp1
     {
         private HubConnection connection;
         private List<ChatMessage> chatHistory;
+        private User MaleUser;
+        private User FemaleUser;
+        public ChatSession session;
+        public string apiKey = "AIzaSyDgEE0rmE5_yAdF-9cJA7BhflNb79VMMOk";
 
         public MainWindow()
         {
             InitializeComponent();
+            MaleUser = new User { Name = "Nam", Age = 24, Gender = "Male" };
+            FemaleUser = new User { Name = "Van", Age = 18, Gender = "Female" };
             InitializeSignalR();
             InitializeFirebase();
+            ChatLoad();
+            StartAutoConversation();
+        }
 
+        public void ChatLoad()
+        {
+            var model = new GenerativeModel(apiKey);
+            session = model.StartChat(new StartChatParams());
         }
 
         public void InitializeSignalR()
@@ -34,13 +52,15 @@ namespace Duongtddse172132_CloudApp1
                 .WithUrl("http://localhost:5258/chathub")
                 .Build();
 
-            SendMessageButton.IsEnabled = false;
-
             connection.On<string, string>("ReceiveMessage", (user, message) =>
             {
                 Dispatcher.Invoke(() =>
                 {
-                    AddMessageToChatHistory(user, "User2", message);
+                    AddMessageToChatHistory(user, MaleUser.Name, message);
+                    if (user != MaleUser.Name)
+                    {
+                        SendAutomatedMessage(message);
+                    }
                 });
             });
 
@@ -54,7 +74,6 @@ namespace Duongtddse172132_CloudApp1
                 Credential = GoogleCredential.FromFile("D:\\Docm\\Dev\\.learning-process\\C#\\PRN221_B3W\\chat-real-time\\App1\\Duongtddse172132_CloudApp1\\Duongtddse172132_CloudApp1\\serviceAccount.json"),
                 ProjectId = "fir-chathistory",
             });
-
         }
 
         private async void StartConnection()
@@ -62,38 +81,10 @@ namespace Duongtddse172132_CloudApp1
             try
             {
                 await connection.StartAsync();
-                SendMessageButton.IsEnabled = true;
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Connection failed: {ex.Message}");
-            }
-        }
-
-        private async void SendMessage_Click(object sender, RoutedEventArgs e)
-        {
-            if (!string.IsNullOrEmpty(MessageTextBox.Text))
-            {
-                if (connection.State == HubConnectionState.Connected)
-                {
-                    try
-                    {
-                        string user = "User1";
-                        string message = MessageTextBox.Text;
-
-                        await connection.InvokeAsync("SendMessage", user, message);
-                        //AddMessageToChatHistory(user, "Receiver", message);
-                        MessageTextBox.Clear();
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"Error sending message: {ex.Message}");
-                    }
-                }
-                else
-                {
-                    MessageBox.Show("Connection is not active. Please wait...");
-                }
             }
         }
 
@@ -121,24 +112,16 @@ namespace Duongtddse172132_CloudApp1
                 BorderBrush = Brushes.Gray,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(5),
-                Background = (sender == "User1") ? Brushes.LightBlue : Brushes.LightGray,
+                Background = (sender == MaleUser.Name) ? Brushes.LightBlue : Brushes.LightGray,
                 Margin = new Thickness(10, 5, 10, 5),
                 Child = messageTextBlock,
-                HorizontalAlignment = (sender == "User1") ? HorizontalAlignment.Right : HorizontalAlignment.Left
+                HorizontalAlignment = (sender == MaleUser.Name) ? HorizontalAlignment.Right : HorizontalAlignment.Left
             };
 
             BlockUIContainer blockUIContainer = new BlockUIContainer(messageBorder);
 
             ChatHistoryRichTextBox.Document.Blocks.Add(blockUIContainer);
             ChatHistoryRichTextBox.ScrollToEnd();
-        }
-
-        private void UserInputTextBox_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Enter)
-            {
-                SendMessage_Click(sender, e);
-            }
         }
 
         private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -161,6 +144,59 @@ namespace Duongtddse172132_CloudApp1
                 string json = JsonSerializer.Serialize(chatHistory, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(filePath, json);
             }
+        }
+
+        private async void StartAutoConversation()
+        {
+            if (connection.State == HubConnectionState.Connected)
+            {
+                try
+                {
+                    string initialMessage = $"Assuming I am {MaleUser.Name} 24 years-old!\n You are {FemaleUser.Name}\nI love u so muchhhh";
+                    //AddMessageToChatHistory(MaleUser.Name, FemaleUser.Name, initialMessage);
+                    await connection.InvokeAsync("SendMessage", MaleUser.Name, initialMessage);
+
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error sending message: {ex.Message}");
+                }
+            }
+            else
+            {
+                MessageBox.Show("Connection is not active. Please wait...");
+            }
+           
+        }
+
+        private async void SendAutomatedMessage(string message)
+        {
+            if (connection.State == HubConnectionState.Connected)
+            {
+                try
+                {
+                    await Task.Delay(5000);
+                    string aiResponse = await session.SendMessageAsync(message);
+                    //AddMessageToChatHistory(MaleUser.Name, FemaleUser.Name, aiResponse);
+                    await connection.InvokeAsync("SendMessage", MaleUser.Name, aiResponse);
+                    await Task.Delay(5000);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error sending message: {ex.Message}");
+                }
+            }
+            else
+            {
+                MessageBox.Show("Connection is not active. Please wait...");
+            }
+        }
+
+        public class User
+        {
+            public string Name { get; set; }
+            public int Age { get; set; }
+            public string Gender { get; set; }
         }
 
         public class ChatMessage
