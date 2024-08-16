@@ -1,4 +1,6 @@
-﻿using FirebaseAdmin;
+﻿using Firebase.Auth;
+using Firebase.Storage;
+using FirebaseAdmin;
 using GenerativeAI.Methods;
 using GenerativeAI.Models;
 using GenerativeAI.Types;
@@ -6,6 +8,7 @@ using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Win32;
+using Newtonsoft.Json;
 using System;
 using System.IO;
 using System.Text.Json;
@@ -127,20 +130,18 @@ namespace Duongtddse172132_CloudApp2
             SaveChatHistory();
         }
 
-        private void SaveChatHistory()
+        private async Task SaveChatHistory()
         {
-            SaveFileDialog saveFileDialog = new SaveFileDialog
+            try
             {
-                Filter = "JSON Files (*.json)|*.json",
-                FileName = "chatHistory.json"
-            };
-
-            if (saveFileDialog.ShowDialog() == true)
+                var localFilePath = Path.Combine(Directory.GetCurrentDirectory(), "chatHistory.json");
+                var json = JsonConvert.SerializeObject(chatHistory, Formatting.Indented);
+                File.WriteAllText(localFilePath, json);
+                await UploadFileToFirebase(localFilePath);
+            }
+            catch (Exception ex)
             {
-                string filePath = saveFileDialog.FileName;
-
-                string json = JsonSerializer.Serialize(chatHistory, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(filePath, json);
+                MessageBox.Show($"Failed to save or upload chat history: {ex.Message}");
             }
         }
 
@@ -161,6 +162,7 @@ namespace Duongtddse172132_CloudApp2
                     string aiResponse = await session.SendMessageAsync(message);
                     //AddMessageToChatHistory(FemaleUser.Name, MaleUser.Name, aiResponse);
                     await connection.InvokeAsync("SendMessage", FemaleUser.Name, aiResponse);
+                    await SaveChatHistory();
                     await Task.Delay(5000);
                 }
                 catch (Exception ex)
@@ -187,6 +189,39 @@ namespace Duongtddse172132_CloudApp2
             public string Receiver { get; set; }
             public string Message { get; set; }
             public DateTime Timestamp { get; set; }
+        }
+
+        public async Task<string> GetFirebaseAuthToken(string email, string password)
+        {
+            var authProvider = new FirebaseAuthProvider(new FirebaseConfig("AIzaSyC8ufMTi4s2D9g17q5jX0C4PIi-ahelFGQ"));
+            var auth = await authProvider.SignInWithEmailAndPasswordAsync(email, password);
+            return await auth.GetFreshAuthAsync().ContinueWith(task => task.Result.FirebaseToken);
+        }
+
+        private async Task UploadFileToFirebase(string filePath)
+        {
+            try
+            {
+                var storage = new FirebaseStorage(
+                    "fir-chathistory.appspot.com",
+                    new FirebaseStorageOptions
+                    {
+                        AuthTokenAsyncFactory = async () => await GetFirebaseAuthToken("nextintern.corp@gmail.com", "swdnextinterniumaycauratnhiu:D"),
+                        ThrowOnCancel = true
+                    });
+
+                using (var fileStream = File.OpenRead(filePath))
+                {
+                    await storage
+                        .Child("chatHistory")
+                        .Child("chatHistory.json")
+                        .PutAsync(fileStream);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error uploading file: {ex.Message}");
+            }
         }
     }
 }
